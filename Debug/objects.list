@@ -2,6 +2,7 @@
 "./Core/Src/LIS2MDL.o"
 "./Core/Src/SensorFusion.o"
 "./Core/Src/main.o"
+"./Core/Src/spi_bus.o"
 "./Core/Src/stm32f4xx_hal_msp.o"
 "./Core/Src/stm32f4xx_it.o"
 "./Core/Src/syscalls.o"

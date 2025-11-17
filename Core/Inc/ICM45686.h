@@ -4,10 +4,10 @@
  *
  * Hardware: TDK InvenSense ICM-45686 3-axis accelerometer + 3-axis gyroscope
  * Interface: SPI (4-wire mode, max 24 MHz)
- * Platform: STM32F4xx
+ * Platform: Hardware-independent via SPI bus abstraction
  *
  * @author Vedarsh Reddy Muniratnam
- * @date November 14, 2025
+ * @date November 17, 2025
  *
  * @note This driver follows NASA JPL and MISRA C coding standards
  * @note All register addresses from ICM-45686 datasheet DS-000577 Rev 1.0
@@ -16,7 +16,7 @@
 #ifndef ICM45686_H
 #define ICM45686_H
 
-#include "stm32f4xx_hal.h"
+#include "spi_bus.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -29,13 +29,7 @@
 
 /* Device Identification */
 #define ICM45686_WHO_AM_I_REG       (0x72U)    /**< WHO_AM_I register address */
-#define ICM45686_WHO_AM_I_VALUE     (0xE9U)    /**< Expected WHO_AM_I response *///TODO - Investigate why this is ED instead of E9
-
-/* SPI Communication Parameters */
-#define ICM45686_SPI_READ_BIT       (0x80U)    /**< SPI read operation bit mask */
-#define ICM45686_SPI_WRITE_BIT      (0x00U)    /**< SPI write operation bit mask */
-#define ICM45686_SPI_MAX_FREQ_HZ    (24000000U) /**< Maximum SPI frequency: 24 MHz */
-#define ICM45686_SPI_TIMEOUT_MS     (100U)     /**< SPI transaction timeout */
+#define ICM45686_WHO_AM_I_VALUE     (0xE9U)    /**< Expected WHO_AM_I response */
 
 /* Timing Constants (from datasheet) */
 #define ICM45686_STARTUP_TIME_MS    (50U)      /**< Device startup time after power-on */
@@ -73,6 +67,7 @@
 #define ICM45686_REG_FIFO_CONFIG3       (0x21U)  /**< FIFO configuration register 3 */
 
 #define ICM45686_REG_INT1_CONFIG0       (0x16U)  /**< Interrupt 1 configuration 0 */
+#define ICM45686_REG_INT1_CONFIG1       (0x17U)  /**< Interrupt 1 configuration 1 */
 #define ICM45686_REG_INT1_CONFIG2       (0x18U)  /**< Interrupt 1 configuration 2 */
 #define ICM45686_REG_INT1_STATUS0       (0x19U)  /**< Interrupt 1 status flags 0 */
 
@@ -109,57 +104,33 @@
 #define ICM45686_GYRO_FS_31_25DPS   (0x70U)    /**< ±31.25 dps, 1048.6 LSB/dps */
 #define ICM45686_GYRO_FS_15_625DPS  (0x80U)    /**< ±15.625 dps, 2097.2 LSB/dps */
 
-/* Accelerometer Full-Scale Range (ACCEL_UI_FS_SEL bits [6:4]) - CORRECTED */
-#define ICM45686_ACCEL_FS_32G       (0x00U << 4)    /**< ±32g, 1024 LSB/g, bits 000 */
-#define ICM45686_ACCEL_FS_16G       (0x01U << 4)    /**< ±16g, 2048 LSB/g, bits 001 */
-#define ICM45686_ACCEL_FS_8G        (0x02U << 4)    /**< ±8g, 4096 LSB/g, bits 010 */
-#define ICM45686_ACCEL_FS_4G        (0x03U << 4)    /**< ±4g, 8192 LSB/g, bits 011 */
-#define ICM45686_ACCEL_FS_2G        (0x04U << 4)    /**< ±2g, 16384 LSB/g, bits 100 */
+/* Accelerometer Full-Scale Range (ACCEL_UI_FS_SEL bits [6:4]) */
+#define ICM45686_ACCEL_FS_32G       (0x00U << 4)    /**< ±32g, 1024 LSB/g */
+#define ICM45686_ACCEL_FS_16G       (0x01U << 4)    /**< ±16g, 2048 LSB/g */
+#define ICM45686_ACCEL_FS_8G        (0x02U << 4)    /**< ±8g, 4096 LSB/g */
+#define ICM45686_ACCEL_FS_4G        (0x03U << 4)    /**< ±4g, 8192 LSB/g */
+#define ICM45686_ACCEL_FS_2G        (0x04U << 4)    /**< ±2g, 16384 LSB/g */
+
 /** @} */
 
-/** @defgroup ICM45686_Interrupt_Config Interrupt Configuration Registers */
+/** @defgroup ICM45686_Interrupt_Config Interrupt Configuration */
 /** @{ */
 
-/* Interrupt Configuration Register Addresses */
-#define ICM45686_REG_INT1_CONFIG0       (0x16U)  /**< Interrupt 1 configuration 0 */
-#define ICM45686_REG_INT1_CONFIG1       (0x17U)  /**< Interrupt 1 configuration 1 */
-#define ICM45686_REG_INT1_CONFIG2       (0x18U)  /**< Interrupt 1 configuration 2 */
-#define ICM45686_REG_INT1_STATUS0       (0x19U)  /**< Interrupt 1 status flags 0 */
-
-/* INT1_CONFIG0 Register Bit Positions */
-#define ICM45686_INT1_CFG0_RESET_DONE_EN_POS    (7U)  /**< Reset done interrupt enable bit position */
-#define ICM45686_INT1_CFG0_AUX1_AGC_RDY_EN_POS  (6U)  /**< AUX1 AGC ready interrupt enable bit position */
-#define ICM45686_INT1_CFG0_AP_AGC_RDY_EN_POS    (5U)  /**< UI AGC ready interrupt enable bit position */
-#define ICM45686_INT1_CFG0_AP_FSYNC_EN_POS      (4U)  /**< UI FSYNC interrupt enable bit position */
-#define ICM45686_INT1_CFG0_AUX1_DRDY_EN_POS     (3U)  /**< AUX1 data ready interrupt enable bit position */
-#define ICM45686_INT1_CFG0_DRDY_EN_POS          (2U)  /**< UI data ready interrupt enable bit position */
-#define ICM45686_INT1_CFG0_FIFO_THS_EN_POS      (1U)  /**< FIFO threshold interrupt enable bit position */
-#define ICM45686_INT1_CFG0_FIFO_FULL_EN_POS     (0U)  /**< FIFO full interrupt enable bit position */
-
 /* INT1_CONFIG0 Register Bit Masks */
-#define ICM45686_INT1_CFG0_RESET_DONE_EN_MASK   (0x80U)  /**< Reset done interrupt enable: bit 7 */
-#define ICM45686_INT1_CFG0_AUX1_AGC_RDY_EN_MASK (0x40U)  /**< AUX1 AGC ready interrupt enable: bit 6 */
-#define ICM45686_INT1_CFG0_AP_AGC_RDY_EN_MASK   (0x20U)  /**< UI AGC ready interrupt enable: bit 5 */
-#define ICM45686_INT1_CFG0_AP_FSYNC_EN_MASK     (0x10U)  /**< UI FSYNC interrupt enable: bit 4 */
-#define ICM45686_INT1_CFG0_AUX1_DRDY_EN_MASK    (0x08U)  /**< AUX1 data ready interrupt enable: bit 3 */
-#define ICM45686_INT1_CFG0_DRDY_EN_MASK         (0x04U)  /**< UI data ready interrupt enable: bit 2 */
-#define ICM45686_INT1_CFG0_FIFO_THS_EN_MASK     (0x02U)  /**< FIFO threshold interrupt enable: bit 1 */
-#define ICM45686_INT1_CFG0_FIFO_FULL_EN_MASK    (0x01U)  /**< FIFO full interrupt enable: bit 0 */
-
-/* INT1_CONFIG0 Register Reset Value */
-#define ICM45686_INT1_CFG0_RESET_VALUE          (0x80U)  /**< Reset done interrupt enabled by default */
-
-/* Interrupt Enable/Disable Values */
-#define ICM45686_INT_DISABLE                    (0U)     /**< Disable interrupt */
-#define ICM45686_INT_ENABLE                     (1U)     /**< Enable interrupt */
+#define ICM45686_INT1_CFG0_RESET_DONE_EN_MASK   (0x80U)
+#define ICM45686_INT1_CFG0_AUX1_AGC_RDY_EN_MASK (0x40U)
+#define ICM45686_INT1_CFG0_AP_AGC_RDY_EN_MASK   (0x20U)
+#define ICM45686_INT1_CFG0_AP_FSYNC_EN_MASK     (0x10U)
+#define ICM45686_INT1_CFG0_AUX1_DRDY_EN_MASK    (0x08U)
+#define ICM45686_INT1_CFG0_DRDY_EN_MASK         (0x04U)
+#define ICM45686_INT1_CFG0_FIFO_THS_EN_MASK     (0x02U)
+#define ICM45686_INT1_CFG0_FIFO_FULL_EN_MASK    (0x01U)
 
 /** @} */
-
 
 /** @defgroup ICM45686_ODR Output Data Rate Settings */
 /** @{ */
 
-/* Output Data Rate Selection (ACCEL_ODR bits [3:0]) */
 #define ICM45686_ODR_32KHZ              (0x01U)  /**< 32 kHz ODR (LN mode only) */
 #define ICM45686_ODR_16KHZ              (0x02U)  /**< 16 kHz ODR (LN mode only) */
 #define ICM45686_ODR_8KHZ               (0x03U)  /**< 8 kHz ODR */
@@ -176,7 +147,6 @@
 /** @defgroup ICM45686_Error_Codes Driver Error Codes */
 /** @{ */
 
-/* Error Return Codes */
 #define ICM45686_OK                     (0)      /**< Operation successful */
 #define ICM45686_ERR_SPI                (-1)     /**< SPI communication error */
 #define ICM45686_ERR_TIMEOUT            (-2)     /**< Operation timeout */
@@ -193,229 +163,90 @@
 
 /**
  * @brief IMU raw sensor data structure
- * @note All values are raw 16-bit signed ADC outputs
- * @note Units depend on configured full-scale range
  */
 typedef struct {
-    int16_t accel_x_raw;    /**< Raw X-axis acceleration */
-    int16_t accel_y_raw;    /**< Raw Y-axis acceleration */
-    int16_t accel_z_raw;    /**< Raw Z-axis acceleration */
-
-    int16_t gyro_x_raw;     /**< Raw X-axis angular rate */
-    int16_t gyro_y_raw;     /**< Raw Y-axis angular rate */
-    int16_t gyro_z_raw;     /**< Raw Z-axis angular rate */
-
-    int16_t temp_raw;       /**< Raw temperature sensor data */
+    int16_t accel_x_raw;
+    int16_t accel_y_raw;
+    int16_t accel_z_raw;
+    int16_t gyro_x_raw;
+    int16_t gyro_y_raw;
+    int16_t gyro_z_raw;
+    int16_t temp_raw;
 } Icm45686_RawData_t;
 
 /**
- * @brief IMU scaled sensor data structure (SI units)
- * @note Values converted to engineering units
+ * @brief IMU scaled sensor data structure
  */
 typedef struct {
-    float accel_x_g;     /**< X-axis acceleration in m/s² */
-    float accel_y_g;     /**< Y-axis acceleration in m/s² */
-    float accel_z_g;     /**< Z-axis acceleration in m/s² */
-
-    float gyro_x_dps;       /**< X-axis angular rate in degrees/s */
-    float gyro_y_dps;       /**< Y-axis angular rate in degrees/s */
-    float gyro_z_dps;       /**< Z-axis angular rate in degrees/s */
-
-    float temp_degc;        /**< Temperature in degrees Celsius */
+    float accel_x_g;
+    float accel_y_g;
+    float accel_z_g;
+    float gyro_x_dps;
+    float gyro_y_dps;
+    float gyro_z_dps;
+    float temp_degc;
 } Icm45686_ScaledData_t;
 
 /**
  * @brief Device configuration structure
- * @note Must be initialized before calling icm45686_init()
  */
 typedef struct {
-    uint8_t accel_fsr;      /**< Accelerometer full-scale range */
-    uint8_t gyro_fsr;       /**< Gyroscope full-scale range */
-    uint8_t accel_odr;      /**< Accelerometer output data rate */
-    uint8_t gyro_odr;       /**< Gyroscope output data rate */
-    uint8_t accel_mode;     /**< Accelerometer power mode (LP/LN) */
-    uint8_t gyro_mode;      /**< Gyroscope power mode (LP/LN) */
-    uint8_t drdy_mode;		/**< Interrupt settings for INT1 Pin */
+    uint8_t accel_fsr;
+    uint8_t gyro_fsr;
+    uint8_t accel_odr;
+    uint8_t gyro_odr;
+    uint8_t accel_mode;
+    uint8_t gyro_mode;
+    uint8_t drdy_mode;
 } Icm45686_Config_t;
 
 /**
  * @brief Device handle structure
- * @note Maintains driver state and hardware interface
  */
 typedef struct {
-    SPI_HandleTypeDef* hspi;        /**< Pointer to SPI handle */
-    GPIO_TypeDef* cs_port;          /**< Chip select GPIO port */
-    uint16_t cs_pin;                /**< Chip select GPIO pin */
-    Icm45686_Config_t config;       /**< Device configuration */
-    bool is_initialized;            /**< Initialization status flag */
-    float accel_scale_factor;       /**< Accelerometer LSB to m/s² conversion */
-    float gyro_scale_factor;        /**< Gyroscope LSB to dps conversion */
+    Spi_Device_t spi_device;            /**< SPI device handle (bus abstraction) */
+    Icm45686_Config_t config;           /**< Device configuration */
+    bool is_initialized;                /**< Initialization status flag */
+    float accel_scale_factor;           /**< Accelerometer LSB to g conversion */
+    float gyro_scale_factor;            /**< Gyroscope LSB to dps conversion */
 } Icm45686_Handle_t;
 
 /* ============================================================================
  * FUNCTION PROTOTYPES
  * ============================================================================ */
 
-/**
- * @brief Initialize the ICM-45686 sensor
- * @param[in] handle Pointer to device handle structure (must not be NULL)
- * @param[in] hspi Pointer to configured SPI handle (must not be NULL)
- * @param[in] cs_port Chip select GPIO port
- * @param[in] cs_pin Chip select GPIO pin
- * @param[in] config Pointer to configuration structure (must not be NULL)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre SPI peripheral must be initialized and configured for mode 0 or 3
- * @pre CS pin must be configured as GPIO output, initially high
- * @post Device is initialized and ready for data acquisition
- */
 int32_t icm45686_init(Icm45686_Handle_t* handle,
                       SPI_HandleTypeDef* hspi,
                       GPIO_TypeDef* cs_port,
                       uint16_t cs_pin,
                       const Icm45686_Config_t* config);
 
-/**
- * @brief Read WHO_AM_I register for device identification
- * @param[in] handle Pointer to initialized device handle
- * @param[out] who_am_i Pointer to store WHO_AM_I value
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- */
 int32_t icm45686_read_who_am_i(Icm45686_Handle_t* handle, uint8_t* who_am_i);
 
-/**
- * @brief Read raw sensor data from all axes
- * @param[in] handle Pointer to initialized device handle
- * @param[out] data Pointer to raw data structure (must not be NULL)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- * @post data structure contains latest sensor readings
- * @note Burst read operation reads all sensors in single transaction
- */
 int32_t icm45686_read_raw_data(Icm45686_Handle_t* handle,
                                Icm45686_RawData_t* data);
 
-/**
- * @brief Read and scale sensor data to engineering units
- * @param[in] handle Pointer to initialized device handle
- * @param[out] data Pointer to scaled data structure (must not be NULL)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- * @post data structure contains scaled sensor readings in SI units
- */
 int32_t icm45686_read_scaled_data(Icm45686_Handle_t* handle,
                                   Icm45686_ScaledData_t* data);
 
-/**
- * @brief Perform software reset of the device
- * @param[in] handle Pointer to initialized device handle
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- * @post Device registers restored to default values
- * @note Requires reconfiguration after reset
- */
 int32_t icm45686_soft_reset(Icm45686_Handle_t* handle);
 
-/**
- * @brief Set accelerometer full-scale range
- * @param[in] handle Pointer to initialized device handle
- * @param[in] fsr Full-scale range setting (use ICM45686_ACCEL_FS_* constants)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- * @post Accelerometer scale factor updated in handle
- */
 int32_t icm45686_set_accel_fsr(Icm45686_Handle_t* handle, uint8_t fsr);
-
-/**
- * @brief Set gyroscope full-scale range
- * @param[in] handle Pointer to initialized device handle
- * @param[in] fsr Full-scale range setting (use ICM45686_GYRO_FS_* constants)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- * @post Gyroscope scale factor updated in handle
- */
 int32_t icm45686_set_gyro_fsr(Icm45686_Handle_t* handle, uint8_t fsr);
-
-/**
- * @brief Set accelerometer output data rate
- * @param[in] handle Pointer to initialized device handle
- * @param[in] odr Output data rate (use ICM45686_ODR_* constants)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- */
 int32_t icm45686_set_accel_odr(Icm45686_Handle_t* handle, uint8_t odr);
-
-/**
- * @brief Set gyroscope output data rate
- * @param[in] handle Pointer to initialized device handle
- * @param[in] odr Output data rate (use ICM45686_ODR_* constants)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- */
 int32_t icm45686_set_gyro_odr(Icm45686_Handle_t* handle, uint8_t odr);
 
-/**
- * @brief Set device power mode
- * @param[in] handle Pointer to initialized device handle
- * @param[in] accel_mode Accelerometer mode (use ICM45686_ACCEL_MODE_* constants)
- * @param[in] gyro_mode Gyroscope mode (use ICM45686_GYRO_MODE_* constants)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- * @note Mode transitions require settling time per datasheet
- */
 int32_t icm45686_set_power_mode(Icm45686_Handle_t* handle,
                                 uint8_t accel_mode,
                                 uint8_t gyro_mode);
 
-/**
- * @brief Perform self-test on accelerometer and gyroscope
- * @param[in] handle Pointer to initialized device handle
- * @param[out] accel_result Accelerometer self-test result (true = pass)
- * @param[out] gyro_result Gyroscope self-test result (true = pass)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- * @note Self-test procedure follows datasheet section 4.13
- */
+int32_t icm45686_config_int1(Icm45686_Handle_t* handle, uint8_t int_config);
+int32_t icm45686_enable_int1(Icm45686_Handle_t* handle, uint8_t int_mask);
+int32_t icm45686_disable_int1(Icm45686_Handle_t* handle, uint8_t int_mask);
+int32_t icm45686_read_int1_status(Icm45686_Handle_t* handle, uint8_t* status_flags);
+
 int32_t icm45686_self_test(Icm45686_Handle_t* handle,
                            bool* accel_result,
                            bool* gyro_result);
-
-/**
- * @brief Configure INT1 interrupt sources
- * @param[in] handle Pointer to initialized device handle
- * @param[in] int_config Interrupt configuration bitmask (OR of ICM45686_INT1_CFG0_*_MASK)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- * @note Multiple interrupt sources can be enabled by ORing mask values
- */
-int32_t icm45686_config_int1(Icm45686_Handle_t* handle, uint8_t int_config);
-
-/**
- * @brief Enable specific INT1 interrupt source
- * @param[in] handle Pointer to initialized device handle
- * @param[in] int_mask Interrupt bit mask (use ICM45686_INT1_CFG0_*_MASK constants)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- */
-int32_t icm45686_enable_int1(Icm45686_Handle_t* handle, uint8_t int_mask);
-
-/**
- * @brief Disable specific INT1 interrupt source
- * @param[in] handle Pointer to initialized device handle
- * @param[in] int_mask Interrupt bit mask (use ICM45686_INT1_CFG0_*_MASK constants)
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- */
-int32_t icm45686_disable_int1(Icm45686_Handle_t* handle, uint8_t int_mask);
-
-/**
- * @brief Read INT1 status register
- * @param[in] handle Pointer to initialized device handle
- * @param[out] status Pointer to store interrupt status flags
- * @return ICM45686_OK on success, negative error code on failure
- * @pre handle must be initialized via icm45686_init()
- * @note Reading status register clears interrupt flags
- */
-int32_t icm45686_read_int1_status(Icm45686_Handle_t* handle, uint8_t* status);
 
 #endif /* ICM45686_H */

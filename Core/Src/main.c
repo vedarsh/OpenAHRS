@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ICM45686.h"
+#include "LIS2MDL.h"
 #include "stdbool.h"
 /* USER CODE END Includes */
 
@@ -60,7 +61,18 @@ Icm45686_ScaledData_t imu_scaled_data;
 bool is_imu_initialised;
 
 bool is_imu_data_ready = false;
+
 uint8_t whoami = 0x00;
+
+Lis2mdl_Config_t mag_config;
+
+int32_t mag_status;
+
+Lis2mdl_ScaledData_t mag_data;
+
+Lis2mdl_Handle_t mag;
+
+bool is_mag_initialised = false;
 
 /* USER CODE END PV */
 
@@ -86,29 +98,58 @@ static void MX_USB_OTG_FS_PCD_Init(void);
 
 void imu_init(void)
 {
-	imu_config.accel_fsr 	= ICM45686_ACCEL_FS_8G;
-	imu_config.accel_odr 	= ICM45686_ODR_1KHZ;
-	imu_config.gyro_fsr 	= ICM45686_GYRO_FS_1000DPS;
-	imu_config.gyro_odr 	= ICM45686_ODR_1KHZ;
-	imu_config.accel_mode 	= ICM45686_ACCEL_MODE_LN;
-	imu_config.gyro_mode 	= ICM45686_GYRO_MODE_LN;
+    imu_config.accel_fsr  = ICM45686_ACCEL_FS_8G;
+    imu_config.accel_odr  = ICM45686_ODR_1KHZ;
+    imu_config.gyro_fsr   = ICM45686_GYRO_FS_1000DPS;
+    imu_config.gyro_odr   = ICM45686_ODR_1KHZ;
+    imu_config.accel_mode = ICM45686_ACCEL_MODE_LN;
+    imu_config.gyro_mode  = ICM45686_GYRO_MODE_LN;
+    imu_config.drdy_mode  = ICM45686_INT1_CFG0_DRDY_EN_MASK;  // Add this!
 
-	int32_t imu_status = icm45686_init(&imu, &hspi1, IMU_CS_GPIO_Port, IMU_CS_Pin, &imu_config);
+    int32_t imu_status = icm45686_init(&imu, &hspi1, IMU_CS_GPIO_Port, IMU_CS_Pin, &imu_config);
 
-	uint8_t int_config = ICM45686_INT1_CFG0_DRDY_EN_MASK;
-
-	imu_status = icm45686_config_int1(&imu, int_config);
-
-	if(imu_status == ICM45686_OK)
-	{
-		is_imu_initialised = true;
-	}
-
-	else
-	{
-		is_imu_initialised = false;
-	}
+    if (imu_status == ICM45686_OK)
+    {
+        is_imu_initialised = true;
+    }
+    else
+    {
+        is_imu_initialised = false;
+    }
 }
+
+
+/**
+ * @brief Initialize LIS2MDL magnetometer (4-wire SPI mode)
+ * @note In 4-wire SPI, INT/DRDY pin is used as SDO (MISO) - no DRDY available
+ * @note Use polling or timer-based reads instead of interrupt
+ */
+void mag_init(void)
+{
+
+    /* Configure magnetometer for aerospace applications */
+    mag_config.odr = LIS2MDL_ODR_100HZ;              /* 100 Hz update rate */
+    mag_config.mode = LIS2MDL_MODE_CONTINUOUS;       /* Continuous measurement */
+    mag_config.low_power = false;                    /* Full performance mode */
+    mag_config.temp_comp = true;                     /* Temperature compensation ON */
+    mag_config.lpf_enable = true;                    /* Low-pass filter for noise */
+    mag_config.offset_cancel = true;                 /* Hard-iron offset cancellation */
+    mag_config.bdu_enable = true;                    /* Block data update (atomic reads) */
+
+    /* Initialize magnetometer using 4-wire SPI with DMA */
+    mag_status = lis2mdl_init(&mag, &hspi1, MAG_CS_GPIO_Port, MAG_CS_Pin, &mag_config);
+
+    /* NO DRDY interrupt configuration in 4-wire SPI mode */
+    /* INT/DRDY pin is now SDO (MISO) - cannot be used for interrupts */
+
+    /* Set initialization status */
+    if (mag_status == LIS2MDL_OK) {
+        is_mag_initialised = true;
+    } else {
+        is_mag_initialised = false;
+    }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -146,6 +187,7 @@ int main(void)
   MX_USB_OTG_FS_PCD_Init();
   /* USER CODE BEGIN 2 */
   imu_init();
+//  mag_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -157,6 +199,8 @@ int main(void)
 		  icm45686_read_scaled_data(&imu, &imu_scaled_data);
 		  is_imu_data_ready = false;
 	  }
+
+//      lis2mdl_read_scaled_data(&mag, &mag_data);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -258,7 +302,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;

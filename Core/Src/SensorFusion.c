@@ -10,4 +10,3 @@
 
 #include "ICM45686.h"
 
-

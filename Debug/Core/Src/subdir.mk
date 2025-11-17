@@ -9,6 +9,7 @@ C_SRCS += \
 ../Core/Src/LIS2MDL.c \
 ../Core/Src/SensorFusion.c \
 ../Core/Src/main.c \
+../Core/Src/spi_bus.c \
 ../Core/Src/stm32f4xx_hal_msp.c \
 ../Core/Src/stm32f4xx_it.c \
 ../Core/Src/syscalls.c \
@@ -20,6 +21,7 @@ OBJS += \
 ./Core/Src/LIS2MDL.o \
 ./Core/Src/SensorFusion.o \
 ./Core/Src/main.o \
+./Core/Src/spi_bus.o \
 ./Core/Src/stm32f4xx_hal_msp.o \
 ./Core/Src/stm32f4xx_it.o \
 ./Core/Src/syscalls.o \
@@ -31,6 +33,7 @@ C_DEPS += \
 ./Core/Src/LIS2MDL.d \
 ./Core/Src/SensorFusion.d \
 ./Core/Src/main.d \
+./Core/Src/spi_bus.d \
 ./Core/Src/stm32f4xx_hal_msp.d \
 ./Core/Src/stm32f4xx_it.d \
 ./Core/Src/syscalls.d \
@@ -45,7 +48,7 @@ Core/Src/%.o Core/Src/%.su Core/Src/%.cyclo: ../Core/Src/%.c Core/Src/subdir.mk
 clean: clean-Core-2f-Src
 
 clean-Core-2f-Src:
-	-$(RM) ./Core/Src/ICM45686.cyclo ./Core/Src/ICM45686.d ./Core/Src/ICM45686.o ./Core/Src/ICM45686.su ./Core/Src/LIS2MDL.cyclo ./Core/Src/LIS2MDL.d ./Core/Src/LIS2MDL.o ./Core/Src/LIS2MDL.su ./Core/Src/SensorFusion.cyclo ./Core/Src/SensorFusion.d ./Core/Src/SensorFusion.o ./Core/Src/SensorFusion.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/stm32f4xx_hal_msp.cyclo ./Core/Src/stm32f4xx_hal_msp.d ./Core/Src/stm32f4xx_hal_msp.o ./Core/Src/stm32f4xx_hal_msp.su ./Core/Src/stm32f4xx_it.cyclo ./Core/Src/stm32f4xx_it.d ./Core/Src/stm32f4xx_it.o ./Core/Src/stm32f4xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32f4xx.cyclo ./Core/Src/system_stm32f4xx.d ./Core/Src/system_stm32f4xx.o ./Core/Src/system_stm32f4xx.su
+	-$(RM) ./Core/Src/ICM45686.cyclo ./Core/Src/ICM45686.d ./Core/Src/ICM45686.o ./Core/Src/ICM45686.su ./Core/Src/LIS2MDL.cyclo ./Core/Src/LIS2MDL.d ./Core/Src/LIS2MDL.o ./Core/Src/LIS2MDL.su ./Core/Src/SensorFusion.cyclo ./Core/Src/SensorFusion.d ./Core/Src/SensorFusion.o ./Core/Src/SensorFusion.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/spi_bus.cyclo ./Core/Src/spi_bus.d ./Core/Src/spi_bus.o ./Core/Src/spi_bus.su ./Core/Src/stm32f4xx_hal_msp.cyclo ./Core/Src/stm32f4xx_hal_msp.d ./Core/Src/stm32f4xx_hal_msp.o ./Core/Src/stm32f4xx_hal_msp.su ./Core/Src/stm32f4xx_it.cyclo ./Core/Src/stm32f4xx_it.d ./Core/Src/stm32f4xx_it.o ./Core/Src/stm32f4xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32f4xx.cyclo ./Core/Src/system_stm32f4xx.d ./Core/Src/system_stm32f4xx.o ./Core/Src/system_stm32f4xx.su
 
 .PHONY: clean-Core-2f-Src
 

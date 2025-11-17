@@ -1,0 +1,12 @@
+../Core/Src/spi_bus.c:23:9:spi_bus_init_device	24	static
+../Core/Src/spi_bus.c:41:9:spi_bus_write_register	24	static
+../Core/Src/spi_bus.c:63:9:spi_bus_read_register	40	static
+../Core/Src/spi_bus.c:86:9:spi_bus_read_registers	32	static
+../Core/Src/spi_bus.c:132:6:spi_bus_is_transfer_complete	4	static
+../Core/Src/spi_bus.c:137:9:spi_bus_wait_transfer_complete	24	static
+../Core/Src/spi_bus.c:151:20:spi_cs_select	24	static,ignoring_inline_asm
+../Core/Src/spi_bus.c:159:20:spi_cs_deselect	24	static,ignoring_inline_asm
+../Core/Src/spi_bus.c:169:6:HAL_SPI_TxRxCpltCallback	16	static
+../Core/Src/spi_bus.c:174:6:HAL_SPI_TxCpltCallback	16	static
+../Core/Src/spi_bus.c:179:6:HAL_SPI_RxCpltCallback	16	static
+../Core/Src/spi_bus.c:184:6:HAL_SPI_ErrorCallback	16	static

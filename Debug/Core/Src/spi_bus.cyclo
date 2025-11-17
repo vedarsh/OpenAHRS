@@ -1,0 +1,12 @@
+../Core/Src/spi_bus.c:23:9:spi_bus_init_device	4
+../Core/Src/spi_bus.c:41:9:spi_bus_write_register	3
+../Core/Src/spi_bus.c:63:9:spi_bus_read_register	4
+../Core/Src/spi_bus.c:86:9:spi_bus_read_registers	8
+../Core/Src/spi_bus.c:132:6:spi_bus_is_transfer_complete	1
+../Core/Src/spi_bus.c:137:9:spi_bus_wait_transfer_complete	4
+../Core/Src/spi_bus.c:151:20:spi_cs_select	2
+../Core/Src/spi_bus.c:159:20:spi_cs_deselect	2
+../Core/Src/spi_bus.c:169:6:HAL_SPI_TxRxCpltCallback	1
+../Core/Src/spi_bus.c:174:6:HAL_SPI_TxCpltCallback	1
+../Core/Src/spi_bus.c:179:6:HAL_SPI_RxCpltCallback	1
+../Core/Src/spi_bus.c:184:6:HAL_SPI_ErrorCallback	1
