@@ -3,6 +3,7 @@
 #include "app.h"
 #include "math.h"
 #include "ahrs.h"
+#include "tlm.h"
 #include "stm32f411xe.h"
 
 volatile bool read_mag_flag = false;
@@ -11,6 +12,8 @@ volatile bool read_imu_flag = false;
 extern SPI_HandleTypeDef hspi1;
 extern SPI_HandleTypeDef hspi2;
 extern I2C_HandleTypeDef hi2c1;
+
+extern UART_HandleTypeDef huart1;
 
 sensor_state_t lis2mdl_state = SENSOR_NOT_INITIALISED;
 sensor_state_t icm45686_state = SENSOR_NOT_INITIALISED;
@@ -267,7 +270,7 @@ bool app_run(void)
         }
     }
 
-    check_dev_on_i2c(&hi2c1);
+    HAL_UART_Transmit(&huart1, (uint8_t *)&packet, sizeof(packet), 10);
     return true;
 }
 

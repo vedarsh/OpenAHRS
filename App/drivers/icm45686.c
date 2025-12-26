@@ -111,7 +111,7 @@ void icm45686_convert_data(const icm45686_raw_data_t *raw, icm45686_data_t *out)
     const float gyro_scale = 16.4f;    // 2000DPS
 
     // Invert X and Y axes
-    out->accel_x_g =((float)raw->accel_x / accel_scale);
+    out->accel_x_g = ((float)raw->accel_x / accel_scale);
     out->accel_y_g = ((float)raw->accel_y / accel_scale);
     out->accel_z_g =  (float)raw->accel_z / accel_scale;
     
