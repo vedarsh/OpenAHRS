@@ -1,19 +1,29 @@
+#include <stdlib.h>
+
 #include "app.h"
 #include "math.h"
 #include "ahrs.h"
-#include "usbd_cdc_if.h"
+#include "tlm.h"
+#include "stm32f411xe.h"
 
 volatile bool read_mag_flag = false;
 volatile bool read_imu_flag = false;
 
 extern SPI_HandleTypeDef hspi1;
 extern SPI_HandleTypeDef hspi2;
+extern I2C_HandleTypeDef hi2c1;
+
+extern UART_HandleTypeDef huart1;
 
 sensor_state_t lis2mdl_state = SENSOR_NOT_INITIALISED;
 sensor_state_t icm45686_state = SENSOR_NOT_INITIALISED;
 
 mag_data_out_t mag_data;
 imu_data_out_t imu_data;
+static usb_packet_t packet;
+
+icm45686_raw_data_t raw;
+icm45686_data_t scaled;
 
 float heading;
 euler_t orientation;
@@ -22,8 +32,8 @@ euler_t orientation;
 
 const spi_bus_t mag_bus = {
     .hspi = &hspi1,
-    .nss_pin = SPI_NSS_Pin,
-    .nss_port = SPI_NSS_GPIO_Port
+    .nss_pin = MAG_NSS_Pin,
+    .nss_port = MAG_NSS_GPIO_Port
 };
 
 const spi_bus_t imu_bus = {
@@ -49,6 +59,19 @@ imu_config_setup_t icm45686_setup = {
     .odr       = ICM45686_ODR_1KHZ
 };
 
+//calibration data
+
+static const float accel_bias[3] = {
+    0.0184530843f,
+    -0.0007122396f,
+    0.00374943f
+};
+
+static const float gyro_bias[3] = {
+    -0.35056911f,
+    0.09686992f,
+    0.33424798f
+};
 /* ================= MAG INIT ================= */
 
 void lis2mdl_init(const spi_bus_t *bus, sensor_state_t *state)
@@ -68,6 +91,27 @@ void lis2mdl_init(const spi_bus_t *bus, sensor_state_t *state)
     lis2mdl_set_mode(bus, LIS2MDL_MODE_CONTINUOUS);
 
     *state = SENSOR_OK;
+}
+
+typedef struct {
+    uint8_t addresses[10]; // Max 10 devices
+    uint8_t count;
+} i2c_scan_t;
+
+i2c_scan_t check_dev_on_i2c(I2C_HandleTypeDef *hi2c)
+{
+    i2c_scan_t results = {0};
+
+    for (uint16_t i = 0; i < 128; i++)
+    {
+        if (HAL_I2C_IsDeviceReady(hi2c, (i << 1), 2, 5) == HAL_OK)
+        {
+            if (results.count < 10) {
+                results.addresses[results.count++] = (i << 1); // Store 8-bit address
+            }
+        }
+    }
+    return results;
 }
 
 /* ================= IMU INIT ================= */
@@ -136,20 +180,6 @@ static void icm45686_read_data(const spi_bus_t *bus,
                                sensor_state_t *state,
                                imu_data_out_t *data)
 {
-    icm45686_raw_data_t raw;
-    icm45686_data_t scaled;
-
-    static const float accel_bias[3] = {
-        0.0184530843f,
-       -0.0007122396f,
-        0.00374943f
-    };
-
-    static const float gyro_bias[3] = {
-       -0.35056911f,
-        0.09686992f,
-        0.33424798f
-    };
 
     if (!icm45686_read_sensor_ready(bus)) {
         data->is_data_stale = true;
@@ -217,7 +247,6 @@ bool app_run(void)
             ahrs_update(&imu_data, &mag_data, 0.005f);
             ahrs_get_euler(&orientation);
 
-            static usb_packet_t packet;
             packet.start_byte = 0xAA;
 
             packet.accel_x = imu_data.imu_data.accel_x_g;
@@ -238,9 +267,10 @@ bool app_run(void)
             packet.heading_legacy = heading;
 
             packet.end_byte = 0x55;
-            CDC_Transmit_FS((uint8_t*)&packet, sizeof(packet));
         }
     }
+
+    HAL_UART_Transmit(&huart1, (uint8_t *)&packet, sizeof(packet), 10);
     return true;
 }
 

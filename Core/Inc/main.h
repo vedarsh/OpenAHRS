@@ -57,10 +57,12 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define IMU_NSS_Pin GPIO_PIN_8
-#define IMU_NSS_GPIO_Port GPIOA
-#define SPI_NSS_Pin GPIO_PIN_15
-#define SPI_NSS_GPIO_Port GPIOA
+#define IMU_NSS_Pin GPIO_PIN_12
+#define IMU_NSS_GPIO_Port GPIOB
+#define SD_NSS_Pin GPIO_PIN_8
+#define SD_NSS_GPIO_Port GPIOA
+#define MAG_NSS_Pin GPIO_PIN_8
+#define MAG_NSS_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
