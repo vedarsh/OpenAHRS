@@ -1,123 +1,140 @@
 import serial
 import struct
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import time
-import threading
 
-# --- CONFIGURATION ---
-SERIAL_PORT = '/dev/cu.usbmodem338F397533351' 
+# ================= USER CONFIG =================
+SERIAL_PORT = '/dev/cu.usbmodem338F397533351'
 BAUD_RATE = 115200
+DURATION_SEC = 30
 
-# Packet: Start(1) + 3*Accel(4) + 3*Gyro(4) + 3*Mag(4) + 4*Fused(4) + End(1)
-# Total: 1 + 12 + 12 + 12 + 16 + 1 = 54 bytes
-PACKET_FMT = '<BfffffffffffffB' 
+PACKET_FMT = '<BfffffffffffffB'
 PACKET_SIZE = struct.calcsize(PACKET_FMT)
 
-# Global Data
-current_data = {'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0}
-running = True
+# ================= HELPERS =================
+def normalize(v):
+    n = np.linalg.norm(v)
+    return v / n if n > 0 else v
 
-def read_serial_thread():
-    """ Runs in background to keep buffer empty """
-    global current_data, running
-    
-    try:
-        ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-        print(f"Connected to {SERIAL_PORT}")
-        ser.reset_input_buffer()
+def normalize_rows(m):
+    return m / np.linalg.norm(m, axis=1)[:, None]
 
-        while running:
-            # Sync
-            if ser.read(1) != b'\xAA': continue
+AXES = ['X', 'Y', 'Z']
 
-            # Read Body
-            data = ser.read(PACKET_SIZE - 1)
-            if len(data) != (PACKET_SIZE - 1): continue
-            
-            # Unpack
-            unpacked = struct.unpack('<fffffffffffffB', data)
-            
-            # Extract Fused Data (Last 4 floats before footer)
-            # Indices: 0-2 (Acc), 3-5 (Gyro), 6-8 (Mag), 9 (Roll), 10 (Pitch), 11 (Yaw), 12 (Head)
-            roll  = unpacked[9]
-            pitch = unpacked[10]
-            yaw   = unpacked[11]
-            footer = unpacked[13]
+# ================= DATA COLLECTION =================
+def collect_samples():
+    ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+    ser.reset_input_buffer()
 
-            if footer == 0x55:
-                # Store
-                current_data['roll'] = roll
-                current_data['pitch'] = pitch
-                current_data['yaw'] = yaw
+    samples = []
 
-    except Exception as e:
-        print(f"Serial Error: {e}")
-        running = False
-    finally:
-        if 'ser' in locals() and ser.is_open: ser.close()
+    print(f"\nMove the board RANDOMLY for {DURATION_SEC} seconds...")
+    print("Rotate, flip, yaw, pitch — slow & smooth is best.\n")
 
-def get_rotation_matrix(roll, pitch, yaw):
-    # Convert to Radians
-    phi = np.radians(roll)
-    theta = np.radians(pitch)
-    psi = np.radians(yaw)
+    t0 = time.time()
+    while time.time() - t0 < DURATION_SEC:
+        if ser.read(1) != b'\xAA':
+            continue
 
-    # Standard Rotation Matrices
-    Rx = np.array([[1, 0, 0], [0, np.cos(phi), -np.sin(phi)], [0, np.sin(phi), np.cos(phi)]])
-    Ry = np.array([[np.cos(theta), 0, np.sin(theta)], [0, 1, 0], [-np.sin(theta), 0, np.cos(theta)]])
-    Rz = np.array([[np.cos(psi), -np.sin(psi), 0], [np.sin(psi), np.cos(psi), 0], [0, 0, 1]])
+        data = ser.read(PACKET_SIZE - 1)
+        if len(data) != PACKET_SIZE - 1:
+            continue
 
-    return Rz @ Ry @ Rx
+        u = struct.unpack('<fffffffffffffB', data)
+        if u[-1] != 0x55:
+            continue
 
-def visualize():
-    global running
-    
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    plt.subplots_adjust(bottom=0.15) 
+        ax, ay, az = u[0:3]
+        mx, my, mz = u[6:9]
 
-    # Basis Vectors
-    basis = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]) # X, Y, Z
+        samples.append([ax, ay, az, mx, my, mz])
 
-    print("Plotting... Close window to stop.")
+    ser.close()
+    print(f"Collected {len(samples)} samples\n")
+    return np.array(samples)
 
-    try:
-        while running:
-            plt.cla() 
-            
-            # --- SWAP PITCH AND ROLL HERE ---
-            # Original: r=roll, p=pitch
-            # Swapped: r=pitch, p=roll (or however you need them mapped)
-            r = current_data['pitch'] # Swapped
-            p = current_data['roll']  # Swapped
-            y = current_data['yaw']
+# ================= AXIS SOLVERS =================
+def solve_accel_axes(acc):
+    acc_n = normalize_rows(acc)
 
-            # Rotate
-            R = get_rotation_matrix(r, p, y)
-            new_basis = (R @ basis.T).T
+    g_mean = normalize(np.mean(acc_n, axis=0))
+    print("Mean gravity (sensor frame):", g_mean)
 
-            # Plot Vectors
-            # X (Red), Y (Green), Z (Blue)
-            colors = ['r', 'g', 'b']
-            for i in range(3):
-                ax.quiver(0, 0, 0, new_basis[i,0], new_basis[i,1], new_basis[i,2], 
-                          color=colors[i], length=1.0, linewidth=3)
+    M = np.zeros((3,3))
 
-            # Format
-            ax.set_xlim([-1, 1]); ax.set_ylim([-1, 1]); ax.set_zlim([-1, 1])
-            ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
-            ax.set_title(f"AHRS Orientation (Swapped R/P)\nRoll(mapped to Pitch): {r:.1f}°\nPitch(mapped to Roll): {p:.1f}°\nYaw: {y:.1f}°")
-            
-            plt.pause(0.05) 
-            if not plt.fignum_exists(fig.number): running = False
+    # Body Z = gravity
+    z_idx = np.argmax(np.abs(g_mean))
+    M[2, z_idx] = np.sign(g_mean[z_idx])
 
-    except KeyboardInterrupt:
-        running = False
+    # Remaining axes (horizontal plane)
+    rem = np.array([i for i in range(3) if i != z_idx])
 
+    # Variance tells us which axis moved more (horizontal)
+    var = np.var(acc_n[:, rem], axis=0)
+
+    # Larger variance → more horizontal motion
+    order = rem[np.argsort(var)]
+
+    M[0, order[1]] = 1   # Body X
+    M[1, order[0]] = 1   # Body Y
+
+    return M
+
+
+def solve_mag_axes(acc, mag):
+    acc_n = normalize_rows(acc)
+    mag_n = normalize_rows(mag)
+
+    # Remove gravity from mag
+    mag_h = mag_n - (mag_n * acc_n).sum(axis=1)[:, None] * acc_n
+    mag_h = normalize_rows(mag_h)
+
+    north_mean = normalize(np.mean(mag_h, axis=0))
+    print("Mean magnetic north (sensor frame):", north_mean)
+
+    M = np.zeros((3,3))
+
+    # Body X = North
+    x_idx = np.argmax(np.abs(north_mean))
+    M[0, x_idx] = np.sign(north_mean[x_idx])
+
+    rem = [i for i in range(3) if i != x_idx]
+    M[1, rem[0]] = 1
+    M[2, rem[1]] = 1
+
+    return M
+
+# ================= OUTPUT =================
+def print_mapping(name, M):
+    print(f"\n{name} AXIS MAPPING")
+    print("-" * 30)
+    for i in range(3):
+        j = np.argmax(np.abs(M[i]))
+        sign = '+' if M[i, j] > 0 else '-'
+        print(f"Body {AXES[i]} = {sign} Sensor {AXES[j]}")
+
+def print_c_macros(name, M):
+    print(f"\n// {name} C MACROS")
+    for i in range(3):
+        j = np.argmax(np.abs(M[i]))
+        sign = '+' if M[i, j] > 0 else '-'
+        print(f"#define {name}_{AXES[i]} {sign}{AXES[j]}")
+
+# ================= MAIN =================
 if __name__ == "__main__":
-    t = threading.Thread(target=read_serial_thread)
-    t.daemon = True
-    t.start()
-    visualize()
+    samples = collect_samples()
+
+    acc = samples[:, 0:3]
+    mag = samples[:, 3:6]
+
+    M_acc = solve_accel_axes(acc)
+    M_mag = solve_mag_axes(acc, mag)
+
+    print_mapping("ACCEL", M_acc)
+    print_mapping("MAG", M_mag)
+
+    print_c_macros("ACC", M_acc)
+    print_c_macros("MAG", M_mag)
+
+    print("\nCalibration complete.")
+    print("Apply mappings BEFORE bias correction in firmware.")

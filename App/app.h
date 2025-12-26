@@ -61,7 +61,6 @@ typedef struct __attribute__((packed)) {
     uint8_t end_byte;   // 0x55
 } usb_packet_t;
 
-
 typedef enum {
     SENSOR_NOT_INITIALISED = -3,
     SENSOR_OK = 0,
