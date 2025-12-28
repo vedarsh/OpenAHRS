@@ -5,12 +5,15 @@
 
 #include "main.h"
 
-#define GET_TLM_VERB   0x01
-#define GET_TLM_FUSED  0x02
-#define GET_TLM_SENS   0x03
+//Nouns
 
-#define PING            0x10
-#define GET_NTP_TIME_CMD 0x11
+#define GET_TLM_VERB        0x01
+#define GET_TLM_FUSED       0x02
+#define GET_TLM_SENS        0x03
+
+#define PING                0x10
+#define SET_NTP_CMD         0x11
+#define SENSOR_CONFIG       0x12
 
 
 typedef struct __attribute__((packed)) {

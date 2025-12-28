@@ -4,6 +4,7 @@
 #include "math.h"
 #include "ahrs.h"
 #include "tlm.h"
+#include "sensor_types.h"
 #include "stm32f411xe.h"
 
 volatile bool read_mag_flag = false;
@@ -74,9 +75,9 @@ static const float gyro_bias[3] = {
 };
 /* ================= MAG INIT ================= */
 
-void lis2mdl_init(const spi_bus_t *bus, sensor_state_t *state)
+void lis2mdl_init(const spi_bus_t *bus, sensor_state_t *state, mag_config_setup_t *setup)
 {
-    lis2mdl_set_spi_mode(bus, lis2mdl_setup.spi_4_mode);
+    lis2mdl_set_spi_mode(bus, setup->spi_4_mode);
 
     if (lis2mdl_read_chip_id(bus) != 0) {
         *state = SENSOR_ERROR;
@@ -84,11 +85,11 @@ void lis2mdl_init(const spi_bus_t *bus, sensor_state_t *state)
     }
 
     lis2mdl_soft_reset(bus);
-    lis2mdl_set_spi_mode(bus, lis2mdl_setup.spi_4_mode);
-    lis2mdl_config_interface(bus, true, lis2mdl_setup.disable_i2c);
+    lis2mdl_set_spi_mode(bus, setup->spi_4_mode);
+    lis2mdl_config_interface(bus, true, setup->disable_i2c);
     lis2mdl_set_odr(bus, lis2mdl_setup.odr_status);
-    lis2mdl_enable_compensation(bus, lis2mdl_setup.enable_compensation);
-    lis2mdl_set_mode(bus, LIS2MDL_MODE_CONTINUOUS);
+    lis2mdl_enable_compensation(bus, setup->enable_compensation);
+    lis2mdl_set_mode(bus, setup->mode_status);
 
     *state = SENSOR_OK;
 }
@@ -222,7 +223,7 @@ static inline void calculate_mag_north(mag_data_out_t *data, float *heading)
 
 bool app_init(void)
 {
-    lis2mdl_init(&mag_bus, &lis2mdl_state);
+    lis2mdl_init(&mag_bus, &lis2mdl_state, &lis2mdl_setup);
     icm45686_init(&imu_bus, &icm45686_state);
     ahrs_init();
 

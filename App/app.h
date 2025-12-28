@@ -35,16 +35,6 @@ typedef struct {
     bool is_data_stale;
 } imu_data_out_t;
 
-// sensors.h
-
-
-typedef enum {
-    SENSOR_NOT_INITIALISED = -3,
-    SENSOR_OK = 0,
-    SENSOR_DEGRADED = -1,
-    SENSOR_ERROR = -2
-} sensor_state_t;
-
 bool app_init();
 bool app_run();
 
