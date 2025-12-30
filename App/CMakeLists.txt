@@ -5,6 +5,7 @@ add_library(App STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/nav/ahrs.c
     ${CMAKE_CURRENT_SOURCE_DIR}/tlm/tlm.c
     ${CMAKE_CURRENT_SOURCE_DIR}/sensors/imu.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/sensors/mag.c
 
 )
 
