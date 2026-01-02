@@ -119,6 +119,11 @@ sensor_state_t mag_read_data(mag_ctx_t *ctx, mag_output_t *output)
     lis2mdl_data_t mag_data;
     float temp_c;
 
+    if (lis2mdl_set_spi_mode(&ctx->spi_bus, true) != 0)
+    {
+        return ctx->health = SENSOR_ERROR;
+    }
+
     // Read magnetometer data
     if (lis2mdl_read_mag(&ctx->spi_bus, &mag_data) != 0)
     {

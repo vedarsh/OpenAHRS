@@ -1,6 +1,5 @@
 #include "tlm.h"
 #include "stm32f4xx_hal.h"
-#include "stm32f4xx_hal_uart.h"
 #include "app.h"
 #include "mag.h"
 #include "imu.h"
@@ -9,7 +8,31 @@
 #include <string.h>
 #include <stdbool.h>
 
-extern UART_HandleTypeDef huart1;
+/* ================= CONFIGURATION ================= */
+
+// Choose ONE: TLM_USE_USB or TLM_USE_UART
+#define TLM_USE_USB    // Use USB CDC
+// #define TLM_USE_UART   // Use UART
+
+// Enable hardware CRC acceleration (requires CRC peripheral enabled in CubeMX)
+#define USE_HARDWARE_CRC
+
+#ifdef TLM_USE_USB
+    #include "usbd_cdc_if.h"
+    #define TLM_TRANSMIT(data, len)  CDC_Transmit_FS((uint8_t*)(data), (len))
+    #define TLM_RECEIVE_START()      // USB uses callback automatically
+#else
+    #include "stm32f4xx_hal_uart.h"
+    extern UART_HandleTypeDef huart1;
+    #define TLM_TRANSMIT(data, len)  HAL_UART_Transmit(&huart1, (uint8_t*)(data), (len), 100)
+    #define TLM_RECEIVE_START()      HAL_UART_Receive_IT(&huart1, (uint8_t*)rx_buf, sizeof(rx_buf))
+#endif
+
+#ifdef USE_HARDWARE_CRC
+    extern CRC_HandleTypeDef hcrc;  // Defined in main.c
+#endif
+
+/* ================= EXTERNAL REFERENCES ================= */
 
 // External sensor contexts
 extern mag_ctx_t *mag_ctx;
@@ -30,18 +53,53 @@ volatile uint8_t tlm_cmd_verb = 0;
 volatile bool is_tlm_received = false;
 
 static uint32_t error_count = 0;
-static uint32_t ahrs_update_count = 0;
-static uint32_t uptime_ms = 0;
+uint32_t ahrs_update_count = 0;  // Export for app.c
 
-/* ================= CHECKSUM CALCULATION ================= */
+/* ================= OPTIMIZED CHECKSUM CALCULATION ================= */
 
-static uint8_t calculate_checksum(const uint8_t *data, size_t len)
+static inline uint8_t calculate_checksum(const uint8_t *data, size_t len)
 {
+#ifdef USE_HARDWARE_CRC
+    // Hardware-accelerated CRC calculation
+    __HAL_CRC_DR_RESET(&hcrc);
+    
+    // Process word-aligned data (4 bytes at a time)
+    size_t words = len / 4;
+    uint32_t crc32 = 0;
+    
+    if (words > 0) {
+        crc32 = HAL_CRC_Calculate(&hcrc, (uint32_t*)data, words);
+    }
+    
+    // Handle remaining bytes (non-word-aligned tail)
+    size_t remaining = len % 4;
+    if (remaining > 0) {
+        uint32_t last_word = 0;
+        const uint8_t *tail = data + (words * 4);
+        
+        // Pack remaining bytes into a word (little-endian)
+        for (size_t i = 0; i < remaining; i++) {
+            last_word |= ((uint32_t)tail[i]) << (i * 8);
+        }
+        
+        if (words > 0) {
+            crc32 = HAL_CRC_Accumulate(&hcrc, &last_word, 1);
+        } else {
+            crc32 = HAL_CRC_Calculate(&hcrc, &last_word, 1);
+        }
+    }
+    
+    // Reduce CRC32 to 8-bit checksum by XORing all bytes
+    return (uint8_t)((crc32 >> 24) ^ (crc32 >> 16) ^ (crc32 >> 8) ^ crc32);
+    
+#else
+    // Software XOR checksum fallback
     uint8_t sum = 0;
     for (size_t i = 0; i < len; i++) {
         sum ^= data[i];
     }
     return sum;
+#endif
 }
 
 /* ================= PACKET BUILDERS ================= */
@@ -54,17 +112,16 @@ static void build_fused_packet(tlm_fused_t *pkt)
     pkt->yaw = orientation.yaw;
     pkt->heading = heading;
     
-    // Get quaternion from AHRS (implement ahrs_get_quaternion)
-    // For now, set to identity quaternion
-    pkt->qw = 1.0f;
-    pkt->qx = 0.0f;
-    pkt->qy = 0.0f;
-    pkt->qz = 0.0f;
+    quaternion_t quat;
+    ahrs_get_quaternion(&quat);
+    pkt->qw = quat.q0;
+    pkt->qx = quat.q1;
+    pkt->qy = quat.q2;
+    pkt->qz = quat.q3;
     
     pkt->checksum = calculate_checksum((uint8_t*)pkt, offsetof(tlm_fused_t, checksum));
     pkt->end_byte = 0x1F;
 }
-
 static void build_sensor_packet(tlm_sensor_t *pkt)
 {
     pkt->start_byte = 0xF2;
@@ -89,11 +146,11 @@ static void build_health_packet(tlm_health_t *pkt)
     pkt->start_byte = 0xF4;
     pkt->imu_health = imu_ctx->health;
     pkt->mag_health = mag_ctx->health;
-    pkt->imu_error_count = 0; // Track these in your app
+    pkt->imu_error_count = 0; // TODO: Track in app
     pkt->mag_error_count = 0;
     pkt->ahrs_update_count = ahrs_update_count;
     pkt->uptime_ms = HAL_GetTick();
-    pkt->cpu_usage_percent = 0; // Implement if needed
+    pkt->cpu_usage_percent = 0; // TODO: Implement CPU usage monitoring
     
     pkt->checksum = calculate_checksum((uint8_t*)pkt, offsetof(tlm_health_t, checksum));
     pkt->end_byte = 0x4F;
@@ -108,7 +165,7 @@ static void build_sys_params_packet(tlm_sys_params_t *pkt)
     pkt->mag_odr = mag_ctx->mag_config.odr;
     pkt->mag_mode = mag_ctx->mag_config.mode;
     pkt->mag_temp_comp = mag_ctx->mag_config.temp_comp_enabled;
-    pkt->imu_sample_rate_hz = 200; // Your configured rate
+    pkt->imu_sample_rate_hz = 200;
     pkt->mag_sample_rate_hz = 100;
     
     pkt->checksum = calculate_checksum((uint8_t*)pkt, offsetof(tlm_sys_params_t, checksum));
@@ -117,32 +174,32 @@ static void build_sys_params_packet(tlm_sys_params_t *pkt)
 
 /* ================= COMMAND HANDLERS ================= */
 
-static void handle_get_tlm_fused(void)
+static inline void handle_get_tlm_fused(void)
 {
     tlm_fused_t pkt;
     build_fused_packet(&pkt);
-    HAL_UART_Transmit(&huart1, (uint8_t*)&pkt, sizeof(pkt), 100);
+    TLM_TRANSMIT(&pkt, sizeof(pkt));
 }
 
-static void handle_get_tlm_sens(void)
+static inline void handle_get_tlm_sens(void)
 {
     tlm_sensor_t pkt;
     build_sensor_packet(&pkt);
-    HAL_UART_Transmit(&huart1, (uint8_t*)&pkt, sizeof(pkt), 100);
+    TLM_TRANSMIT(&pkt, sizeof(pkt));
 }
 
-static void handle_get_sys_health(void)
+static inline void handle_get_sys_health(void)
 {
     tlm_health_t pkt;
     build_health_packet(&pkt);
-    HAL_UART_Transmit(&huart1, (uint8_t*)&pkt, sizeof(pkt), 100);
+    TLM_TRANSMIT(&pkt, sizeof(pkt));
 }
 
-static void handle_get_sys_params(void)
+static inline void handle_get_sys_params(void)
 {
     tlm_sys_params_t pkt;
     build_sys_params_packet(&pkt);
-    HAL_UART_Transmit(&huart1, (uint8_t*)&pkt, sizeof(pkt), 100);
+    TLM_TRANSMIT(&pkt, sizeof(pkt));
 }
 
 static void handle_set_mag_params(uint8_t verb)
@@ -151,7 +208,7 @@ static void handle_set_mag_params(uint8_t verb)
     
     switch (verb) {
         case MAG_SET_ODR:
-            // ODR values would come from a third byte (extend protocol)
+            // TODO: Extract ODR value from extended command protocol
             mag_ctx->mag_config.odr = LIS2MDL_ODR_100HZ;
             result = mag_reconfigure(mag_ctx);
             break;
@@ -174,7 +231,7 @@ static void handle_set_mag_params(uint8_t verb)
     if (result == SENSOR_OK) {
         tlm_send_response(RESP_ACK, SET_MAG_PARAMS, 0x00);
     } else {
-        tlm_send_response(RESP_ERROR, SET_MAG_PARAMS, result);
+        tlm_send_response(RESP_ERROR, SET_MAG_PARAMS, (uint8_t)result);
     }
 }
 
@@ -184,6 +241,7 @@ static void handle_set_imu_params(uint8_t verb)
     
     switch (verb) {
         case IMU_SET_ACCEL_FSR:
+            // TODO: Extract FSR value from extended command protocol
             imu_ctx->imu_config.accel_fsr = ICM45686_FSR_8G;
             result = imu_reconfigure(imu_ctx);
             break;
@@ -201,16 +259,16 @@ static void handle_set_imu_params(uint8_t verb)
     if (result == SENSOR_OK) {
         tlm_send_response(RESP_ACK, SET_IMU_PARAMS, 0x00);
     } else {
-        tlm_send_response(RESP_ERROR, SET_IMU_PARAMS, result);
+        tlm_send_response(RESP_ERROR, SET_IMU_PARAMS, (uint8_t)result);
     }
 }
 
-static void handle_ping(void)
+static inline void handle_ping(void)
 {
     tlm_send_response(RESP_ACK, CMD_PING, 0x00);
 }
 
-static void handle_reset_comms(void)
+static inline void handle_reset_comms(void)
 {
     error_count = 0;
     tlm_send_response(RESP_ACK, CMD_RESET_COMMS, 0x00);
@@ -280,7 +338,15 @@ static void dispatch_command(uint8_t noun, uint8_t verb)
 
 void tlm_init(void)
 {
+#ifdef TLM_USE_UART
     HAL_UART_Receive_IT(&huart1, (uint8_t*)rx_buf, sizeof(rx_buf));
+#endif
+    // USB CDC automatically receives via callback
+    
+#ifdef USE_HARDWARE_CRC
+    // Initialize CRC peripheral if not already done
+    // CRC should be initialized by MX_CRC_Init() in main.c
+#endif
 }
 
 void process_tlm(void)
@@ -299,21 +365,26 @@ void tlm_send_response(uint8_t response_code, uint8_t command, uint8_t status)
     resp.status_code = status;
     resp.end_byte = 0x55;
     
-    HAL_UART_Transmit(&huart1, (uint8_t*)&resp, sizeof(resp), 50);
+    TLM_TRANSMIT(&resp, sizeof(resp));
 }
 
 void tlm_send_fused(const tlm_fused_t *packet)
 {
-    HAL_UART_Transmit(&huart1, (uint8_t*)packet, sizeof(tlm_fused_t), 100);
+    TLM_TRANSMIT(packet, sizeof(tlm_fused_t));
 }
 
 void tlm_send_sensor(const tlm_sensor_t *packet)
 {
-    HAL_UART_Transmit(&huart1, (uint8_t*)packet, sizeof(tlm_sensor_t), 100);
+    TLM_TRANSMIT(packet, sizeof(tlm_sensor_t));
 }
 
-/* ================= UART CALLBACK ================= */
+/* ================= CALLBACKS ================= */
 
+#ifdef TLM_USE_UART
+/**
+ * @brief UART receive complete callback
+ * @note Called by HAL when 2 bytes received
+ */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart == &huart1) {
@@ -325,3 +396,21 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         HAL_UART_Receive_IT(&huart1, (uint8_t*)rx_buf, sizeof(rx_buf));
     }
 }
+#endif
+
+#ifdef TLM_USE_USB
+/**
+ * @brief USB CDC receive callback
+ * @note This function should be called from CDC_Receive_FS() in usbd_cdc_if.c
+ * @param Buf Pointer to received data buffer
+ * @param Len Length of received data
+ */
+void tlm_usb_receive_callback(uint8_t* Buf, uint32_t Len)
+{
+    if (Len >= 2) {
+        tlm_cmd_noun = Buf[0];
+        tlm_cmd_verb = Buf[1];
+        is_tlm_received = true;
+    }
+}
+#endif

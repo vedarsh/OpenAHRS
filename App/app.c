@@ -31,7 +31,7 @@ float heading;
 euler_t orientation;
 
 // TLM counter
-uint32_t ahrs_update_count = 0;
+extern uint32_t ahrs_update_count;
 
 /* ================= CALIBRATION DATA ================= */
 

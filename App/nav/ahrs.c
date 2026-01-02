@@ -1,5 +1,6 @@
 #include "ahrs.h"
 #include <math.h>
+#include <stdbool.h>
 
 /* =========================================================
  * Quaternion state (body -> navigation)
@@ -9,20 +10,9 @@ static float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;
 /* Gyro bias estimate (rad/s) */
 static float bgx = 0.0f, bgy = 0.0f, bgz = 0.0f;
 
-/* =========================================================
- * Gains (tuned for BNO055-like behavior)
- * ========================================================= */
-
-/* Accelerometer correction (roll/pitch) */
-#define KP_ACC   2.5f
-#define KI_ACC   0.05f
-
-/* Magnetometer correction (yaw only, very weak) */
-#define KP_MAG   0.15f
-#define KI_MAG   0.002f
-
-/* Disable mag correction during fast rotation */
-#define GYRO_MAG_GATE_RAD   0.2f   /* ~11.5 deg/s */
+/* Convergence tracking */
+static uint32_t update_count = 0;
+static float bias_magnitude_history = 0.0f;
 
 /* =========================================================
  * Utilities
@@ -35,7 +25,7 @@ static inline float inv_sqrt(float x)
 }
 
 /* =========================================================
- * Init
+ * Init & Reset
  * ========================================================= */
 
 void ahrs_init(void)
@@ -48,6 +38,14 @@ void ahrs_init(void)
     bgx = 0.0f;
     bgy = 0.0f;
     bgz = 0.0f;
+    
+    update_count = 0;
+    bias_magnitude_history = 0.0f;
+}
+
+void ahrs_reset(void)
+{
+    ahrs_init();
 }
 
 /* =========================================================
@@ -85,7 +83,6 @@ static void ahrs_core(float gx, float gy, float gz,
      * ------------------------- */
     float ex = (ay * vz - az * vy);
     float ey = (az * vx - ax * vz);
-//    float ez = (ax * vy - ay * vx); Never used anyways
 
     /* -------------------------
      * Magnetometer yaw error
@@ -130,6 +127,10 @@ static void ahrs_core(float gx, float gy, float gz,
     bgy += KI_ACC * ey * dt;
     bgz += KI_MAG * emz * dt;
 
+    /* Track bias magnitude for convergence check */
+    float bias_mag = sqrtf(bgx*bgx + bgy*bgy + bgz*bgz);
+    bias_magnitude_history = 0.99f * bias_magnitude_history + 0.01f * bias_mag;
+
     /* -------------------------
      * Apply corrections
      * ------------------------- */
@@ -162,10 +163,15 @@ static void ahrs_core(float gx, float gy, float gz,
     q1 *= recip;
     q2 *= recip;
     q3 *= recip;
+    
+    /* Increment update counter */
+    if (update_count < 0xFFFFFFFF) {
+        update_count++;
+    }
 }
 
 /* =========================================================
- * Public Update (UNCHANGED signature)
+ * Public Update
  * ========================================================= */
 
 void ahrs_update(const imu_data_out_t *imu,
@@ -197,7 +203,7 @@ void ahrs_update(const imu_data_out_t *imu,
 }
 
 /* =========================================================
- * Euler Output (UNCHANGED)
+ * Euler Output
  * ========================================================= */
 
 void ahrs_get_euler(euler_t *out)
@@ -220,4 +226,38 @@ void ahrs_get_euler(euler_t *out)
 
     if (out->yaw < 0.0f)
         out->yaw += 360.0f;
+}
+
+/* =========================================================
+ * Quaternion Output
+ * ========================================================= */
+
+void ahrs_get_quaternion(quaternion_t *out)
+{
+    out->q0 = q0;  // w (scalar part)
+    out->q1 = q1;  // x
+    out->q2 = q2;  // y
+    out->q3 = q3;  // z
+}
+
+/* =========================================================
+ * Gyro Bias Output
+ * ========================================================= */
+
+void ahrs_get_gyro_bias(gyro_bias_t *out)
+{
+    out->x = bgx;
+    out->y = bgy;
+    out->z = bgz;
+}
+
+/* =========================================================
+ * Convergence Check
+ * ========================================================= */
+
+bool ahrs_is_converged(void)
+{
+    // Filter is considered converged after 2 seconds (400 updates @ 200Hz)
+    // AND bias magnitude is stable and small
+    return (update_count > 400) && (bias_magnitude_history < 0.1f);
 }
