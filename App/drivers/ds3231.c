@@ -2,7 +2,6 @@
 /* An STM32 HAL library written for the DS3231 real-time clock IC. */
 /* Library by @eepj www.github.com/eepj */
 #include "ds3231.h"
-#include "main.h"
 #ifdef __cplusplus
 extern "C"{
 #endif

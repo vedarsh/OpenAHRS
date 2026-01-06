@@ -209,6 +209,6 @@ int32_t lis2mdl_read_temperature(const spi_bus_t *bus, float *temp_c)
 bool lis2mdl_read_sensor_ready(const spi_bus_t *bus)
 {
     uint8_t buf = 0;
-    spi_read(bus, LIS2MDL_REG_STATUS, &buf, 1);
+    if(spi_read(bus, LIS2MDL_REG_STATUS, &buf, 1) == -1) return false;
     return (buf & LIS2MDL_STATUS_ZYXDA);
 }

@@ -51,7 +51,7 @@
 #define DS3231_TEMP_MSB		0x11
 #define DS3231_TEMP_LSB		0x12
 
-#define DS3231_TIMEOUT		HAL_MAX_DELAY
+#define DS3231_TIMEOUT		10u
 /*----------------------------------------------------------------------------*/
 typedef enum DS3231_Rate{
 	DS3231_1HZ, DS3231_1024HZ, DS3231_4096HZ, DS3231_8192HZ

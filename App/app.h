@@ -1,5 +1,5 @@
-#ifndef SENSORS_H 
-#define SENSORS_H
+#ifndef APP_H 
+#define APP_H
 
 #include "stm32f4xx.h"
 #include "lis2mdl.h"
@@ -7,6 +7,8 @@
 #include "ds3231.h"
 #include "main.h"
 
+#define TLM_DEFAULT_HEADER 0xAA
+#define TLM_DEFAULT_TAIL  0x55
 
 typedef struct {
     bool spi_4_mode;
@@ -34,16 +36,6 @@ typedef struct {
     icm45686_data_t imu_data;
     bool is_data_stale;
 } imu_data_out_t;
-
-// sensors.h
-
-
-typedef enum {
-    SENSOR_NOT_INITIALISED = -3,
-    SENSOR_OK = 0,
-    SENSOR_DEGRADED = -1,
-    SENSOR_ERROR = -2
-} sensor_state_t;
 
 bool app_init();
 bool app_run();
