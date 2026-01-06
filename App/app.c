@@ -1,9 +1,11 @@
 #include <stdlib.h>
+#include <assert.h>
 
 #include "app.h"
 #include "math.h"
 #include "ahrs.h"
 #include "tlm.h"
+#include "ds3231.h"
 #include "sensor_types.h"
 #include "stm32f411xe.h"
 
@@ -32,6 +34,16 @@ euler_t orientation;
 
 // TLM counter
 extern uint32_t ahrs_update_count;
+
+#ifdef SET_RTC_TIME_ON_STARTUP
+    uint8_t date;
+    uint8_t month;
+    uint16_t year;
+
+    uint8_t hour;
+    uint8_t minute;
+    uint8_t second;
+#endif
 
 /* ================= CALIBRATION DATA ================= */
 
@@ -129,6 +141,34 @@ static void imu_read_calibrated(imu_ctx_t *ctx, imu_data_out_t *data)
     data->is_data_stale = false;
 }
 
+/* RTC clock initialisation */
+
+void initialise_rtc_clock(void)
+{
+    assert(HAL_I2C_IsDeviceReady(&hi2c1, DS3231_I2C_ADDR << 1, 2, DS3231_TIMEOUT) == HAL_OK);
+    DS3231_Init(&hi2c1);
+
+    #ifdef SET_RTC_TIME_ON_STARTUP
+        // Set date: 15th August 2023
+        date = 15;
+        month = 8;
+        year = 2023;
+
+        DS3231_SetDate(date, month, year);
+
+        // Set time: 10:30:00
+        hour = 10;
+        minute = 30;
+        second = 0;
+
+        DS3231_SetTime(hour, minute, second);
+
+        date = DS3231_GetDate();
+        month = DS3231_GetMonth();
+        year = DS3231_GetYear();    
+    #endif 
+}
+
 /* ================= HEADING CALCULATION ================= */
 
 static inline void calculate_mag_north(mag_data_out_t *data, float *heading)
@@ -148,7 +188,7 @@ bool app_init(void)
     mag_ctx = create_mag_ctx(&hspi1, MAG_NSS_GPIO_Port, MAG_NSS_Pin);
     imu_ctx = create_imu_ctx(&hspi2, IMU_NSS_GPIO_Port, IMU_NSS_Pin);
 
-    // Configure magnetometer (continuous mode is critical) [web:51]
+    // Configure magnetometer (continuous mode is critical)
     mag_ctx->mag_config.odr = LIS2MDL_ODR_100HZ;
     mag_ctx->mag_config.mode = LIS2MDL_MODE_CONTINUOUS;  // Critical for continuous readings
     mag_ctx->mag_config.temp_comp_enabled = true;
@@ -162,7 +202,7 @@ bool app_init(void)
     sensor_state_t mag_state = init_mag(mag_ctx);
     sensor_state_t imu_state = init_imu(imu_ctx);
 
-    // Give magnetometer time to settle after init [web:51]
+    // Give magnetometer time to settle after init
     HAL_Delay(100);
 
     // Initialize AHRS and telemetry
@@ -200,7 +240,7 @@ bool app_run(void)
             ahrs_update_count++;
 
             // Prepare telemetry packet (legacy format)
-            packet.start_byte = 0xAA;
+            packet.start_byte = TLM_DEFAULT_HEADER;
 
             packet.accel_x = imu_data.imu_data.accel_x_g;
             packet.accel_y = imu_data.imu_data.accel_y_g;
@@ -219,7 +259,16 @@ bool app_run(void)
             packet.yaw = orientation.yaw;
             packet.heading_legacy = heading;
 
-            packet.end_byte = 0x55;
+            // To be used as timestamp for telemetry
+            packet.date = DS3231_GetDate();
+            packet.month =  DS3231_GetMonth();
+            packet.year = DS3231_GetYear();
+
+            packet.hour = DS3231_GetHour();
+            packet.minute = DS3231_GetMinute();
+            packet.second = DS3231_GetSecond();
+
+            packet.end_byte = TLM_DEFAULT_TAIL;
         }
     }
 

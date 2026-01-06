@@ -179,6 +179,8 @@ static int8_t CDC_DeInit_FS(void)
   */
 static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 {
+  (void)(pbuf);
+  (void)(length);
   /* USER CODE BEGIN 5 */
   switch(cmd)
   {
@@ -260,8 +262,12 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
   */
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
+  (void)(Len);
   /* USER CODE BEGIN 6 */
-  tlm_usb_receive_callback(Buf, *Len);
+
+  #ifdef TLM_USE_USB
+    tlm_usb_receive_callback(Buf, *Len);
+  #endif
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
   return (USBD_OK);

@@ -1,6 +1,7 @@
 add_library(App STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/lis2mdl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/icm45686.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/drivers/ds3231.c
     ${CMAKE_CURRENT_SOURCE_DIR}/app.c
     ${CMAKE_CURRENT_SOURCE_DIR}/nav/ahrs.c
     ${CMAKE_CURRENT_SOURCE_DIR}/tlm/tlm.c

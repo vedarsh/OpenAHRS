@@ -154,6 +154,12 @@ typedef struct __attribute__((packed)) {
     float mag_x;
     float mag_y;
     float mag_z;
+    uint8_t date;
+    uint8_t month;
+    uint16_t year;
+    uint8_t hour;
+    uint8_t minute;
+    uint8_t second;
     float roll;
     float pitch;
     float yaw;

@@ -9,7 +9,6 @@ mag_ctx_t* create_mag_ctx(SPI_HandleTypeDef *hspi, GPIO_TypeDef* Port, uint16_t 
     mag_ctx_t* ctx = &mag_ctx_instance;
     memset(ctx, 0, sizeof(mag_ctx_t));
     
-    // Default configuration per ST recommendations [web:21][web:24]
     ctx->mag_config.odr = DEFAULT_MAG_ODR;
     ctx->mag_config.mode = DEFAULT_MAG_MODE;
     ctx->mag_config.temp_comp_enabled = true;

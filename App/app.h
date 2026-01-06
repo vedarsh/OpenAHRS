@@ -1,5 +1,5 @@
-#ifndef SENSORS_H 
-#define SENSORS_H
+#ifndef APP_H 
+#define APP_H
 
 #include "stm32f4xx.h"
 #include "lis2mdl.h"
@@ -7,6 +7,8 @@
 #include "ds3231.h"
 #include "main.h"
 
+#define TLM_DEFAULT_HEADER 0xAA
+#define TLM_DEFAULT_TAIL  0x55
 
 typedef struct {
     bool spi_4_mode;

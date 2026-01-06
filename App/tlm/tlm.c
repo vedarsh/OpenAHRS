@@ -11,10 +11,8 @@
 /* ================= CONFIGURATION ================= */
 
 // Choose ONE: TLM_USE_USB or TLM_USE_UART
-#define TLM_USE_USB    // Use USB CDC
-// #define TLM_USE_UART   // Use UART
-
-// Enable hardware CRC acceleration (requires CRC peripheral enabled in CubeMX)
+// #define TLM_USE_USB    // Use USB CDC
+#define TLM_USE_UART   // Use UART
 #define USE_HARDWARE_CRC
 
 #ifdef TLM_USE_USB
@@ -22,7 +20,6 @@
     #define TLM_TRANSMIT(data, len)  CDC_Transmit_FS((uint8_t*)(data), (len))
     #define TLM_RECEIVE_START()      // USB uses callback automatically
 #else
-    #include "stm32f4xx_hal_uart.h"
     extern UART_HandleTypeDef huart1;
     #define TLM_TRANSMIT(data, len)  HAL_UART_Transmit(&huart1, (uint8_t*)(data), (len), 100)
     #define TLM_RECEIVE_START()      HAL_UART_Receive_IT(&huart1, (uint8_t*)rx_buf, sizeof(rx_buf))
